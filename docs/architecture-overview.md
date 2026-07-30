@@ -8,7 +8,7 @@
 
 Questo documento definisce i confini architetturali di Kiron CDG e guida le prossime decisioni tecniche.
 
-Lo stato `Active` indica che l'architettura logica è approvata e applicabile al lavoro corrente. I componenti ancora da verificare restano indicati come candidati e potranno essere confermati o scartati sulla base delle prove tecniche previste.
+Lo stato `Active` indica che l'architettura logica è approvata e applicabile al lavoro corrente. Le scelte ancora da verificare restano indicate come candidati e potranno essere confermate o scartate sulla base delle prove previste.
 
 Il funzionamento del prodotto è descritto in [`product-overview.md`](product-overview.md).
 
@@ -16,15 +16,16 @@ Il funzionamento del prodotto è descritto in [`product-overview.md`](product-ov
 
 - OutSystems è il frontend operativo.
 - MariaDB `10.6.22-MariaDB-log` è l'unico database ed è self-managed dal cliente.
-- La versione MariaDB presente dal cliente non è modificabile dal progetto. Deve essere verificato il corretto funzionamento dei componenti scelti su questa versione.
+- La versione MariaDB presente dal cliente non è modificabile dal progetto. I componenti scelti devono funzionare correttamente su questa versione.
 - Configurazioni, mapping, parametri e schedulazioni vengono gestiti in OutSystems e salvati in MariaDB.
 - Le elaborazioni possono essere avviate manualmente o tramite Timer OutSystems.
 - La risoluzione minima dei Timer è 5 minuti.
 - MariaDB è il punto di pubblicazione di Actual e Forecast.
 - BI Oracle accede direttamente ai dati pubblicati su MariaDB. Connessione, credenziali e rete verranno definite durante l'integrazione.
+- SQLMesh è il motore scelto per le trasformazioni e il governo delle elaborazioni. La compatibilità funzionale con MariaDB 10.6.22 è stata verificata nel PoC tracciato dalla [issue #1](https://github.com/ignazio-ingenito/kiron-cdg/issues/1).
 - Non verrà sviluppato un linguaggio proprietario per descrivere le formule.
 
-SQLMesh e GoRules ZEN sono candidati da validare, non componenti ancora confermati.
+GoRules ZEN resta un candidato da validare quando saranno disponibili formule e ribaltamenti reali.
 
 ## Architettura logica
 
@@ -41,8 +42,8 @@ flowchart LR
     D -->|avvia| E[Servizio di esecuzione]
 
     I --> M
-    E --> X[Motore di elaborazione]
-    X --> M
+    E --> S[SQLMesh]
+    S --> M
 
     M --> A[Actual gestionale]
     M --> AC[Actual consolidato]
@@ -53,8 +54,7 @@ flowchart LR
     F --> O
     M --> B[BI Oracle / dashboard]
 
-    S[SQLMesh<br/>da validare] -. candidato .-> X
-    G[GoRules ZEN<br/>validazione differita] -. formule e decisioni .-> X
+    G[GoRules ZEN<br/>validazione differita] -. formule e decisioni .-> S
 ```
 
 ## Responsabilità
@@ -104,26 +104,26 @@ Deve:
 
 - ricevere una richiesta;
 - evitare prese in carico duplicate;
-- avviare l'elaborazione con periodo e parametri richiesti;
+- avviare SQLMesh con periodo e parametri richiesti;
 - aggiornare stato ed esito in MariaDB;
 - restituire subito l'accettazione della richiesta.
 
-Non gestisce le schedulazioni e non contiene formule Kiron. L'implementazione verrà scelta insieme al motore di elaborazione.
+Non gestisce le schedulazioni e non contiene formule Kiron. L'implementazione verrà definita durante la progettazione dell'integrazione con SQLMesh.
 
-### Motore di elaborazione
+### SQLMesh
 
-Il motore dovrà gestire:
+SQLMesh gestisce:
 
 - dipendenze tra elaborazioni;
 - normalizzazione e trasformazioni;
 - aggregazioni, stime e ribaltamenti;
 - riconciliazioni e delta;
 - produzione di Actual e Forecast;
-- intervalli elaborati;
+- intervalli elaborati e rielaborazioni selettive;
 - audit e controlli sui dati;
 - tracciabilità tecnica delle esecuzioni.
 
-SQLMesh è il candidato preferito. La compatibilità con MariaDB `10.6.22` deve essere dimostrata prima di confermarlo.
+Il PoC ha verificato queste capacità di base su MariaDB 10.6.22. Prestazioni e comportamento sui volumi reali verranno misurati durante l'implementazione.
 
 ### GoRules ZEN
 
@@ -151,52 +151,53 @@ sequenceDiagram
     participant O as OutSystems
     participant M as MariaDB
     participant E as Servizio di esecuzione
-    participant X as Motore di elaborazione
+    participant S as SQLMesh
 
     U->>O: Richiede o individua l'elaborazione
     O->>M: Registra la richiesta se non esiste
     O->>E: Avvia la richiesta
     E-->>O: Richiesta accettata
     E->>M: Stato RUNNING
-    E->>X: Esegue l'elaborazione
-    X->>M: Scrive risultati e audit
+    E->>S: Esegue l'elaborazione
+    S->>M: Scrive risultati e audit
     E->>M: Stato COMPLETED o FAILED
     O->>M: Legge stato ed esito
 ```
 
 Gli stati iniziali sono `PENDING`, `RUNNING`, `COMPLETED` e `FAILED`. Altri stati verranno aggiunti solo in presenza di un requisito concreto.
 
+## Validazione SQLMesh su MariaDB
+
+Il PoC della [issue #1](https://github.com/ignazio-ingenito/kiron-cdg/issues/1) è stato eseguito con `mariadb:10.6.22` e `sqlmesh[mysql]` in Docker Compose, usando un Actual gestionale mensile coerente con il dominio Kiron.
+
+Sono stati verificati:
+
+- connessione tramite adapter MySQL;
+- modello di staging;
+- modello incrementale per periodo;
+- elaborazione di gennaio e febbraio;
+- rielaborazione selettiva di gennaio tramite restate;
+- audit di unicità della grana;
+- lettura del risultato finale, composto da sette righe aggregate senza duplicati.
+
+Le correzioni necessarie hanno riguardato la creazione non interattiva dell'ambiente e il corretto riferimento alla tabella sorgente. Non richiedono workaround architetturali.
+
+**Esito:** `SÌ`. SQLMesh è utilizzabile con MariaDB 10.6.22 per le capacità verificate.
+
+La prova non copre la connessione all'istanza cliente, i vincoli di rete e sicurezza, né le prestazioni sui volumi reali. Questi aspetti verranno verificati durante l'integrazione e il dimensionamento delle elaborazioni.
+
 ## Decisioni e verifiche ancora aperte
 
-- compatibilità effettiva di SQLMesh con MariaDB `10.6.22`;
 - modalità di acquisizione da Campus, Campus 2.0 e Infinity;
 - volumi e tempi attesi delle elaborazioni;
 - dettagli tecnici di accesso di BI Oracle;
+- contratto tra OutSystems e servizio di esecuzione;
 - formule, riconciliazioni e ribaltamenti ancora da definire;
 - utilità effettiva di GoRules ZEN.
 
 Questi punti non modificano i confini architetturali approvati. Ogni scelta tecnica che ne dipende verrà presa dopo la relativa verifica.
 
-## Gate tecnici
-
-### SQLMesh e MariaDB
-
-La prima prova deve rispondere a questa domanda:
-
-> SQLMesh può collegarsi a MariaDB `10.6.22`, eseguire un modello semplice e uno incrementale, applicare un audit e gestire correttamente gli intervalli senza workaround sproporzionati?
-
-La prova include solo:
-
-- connessione tramite l'adapter MySQL;
-- un modello semplice;
-- un modello incrementale per periodo;
-- un audit;
-- una seconda esecuzione sugli stessi intervalli;
-- raccolta delle incompatibilità riscontrate.
-
-L'esito sarà `SÌ`, `NO` o `PARZIALE`. Nel terzo caso, ogni workaround verrà valutato contro RFC-0001.
-
-### GoRules ZEN
+## Gate tecnico GoRules ZEN
 
 La validazione verrà aperta dopo l'ingestione dati e prima di sviluppare formule e ribaltamenti. Userà casi reali Kiron e gli stessi criteri di semplicità, beneficio verificabile e costo di integrazione.
 
