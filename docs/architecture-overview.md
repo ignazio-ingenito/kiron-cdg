@@ -1,25 +1,27 @@
 # Kiron CDG: panoramica architetturale
 
-**Stato:** Draft  
+**Stato:** Active  
 **Ambito:** architettura logica e responsabilità dei componenti  
 **Principio guida:** [RFC-0001](https://github.com/ignazio-ingenito/agent-os/blob/main/rfcs/RFC-0001-principles.md)
 
 ## Scopo
 
-Questo documento descrive i confini architetturali di Kiron CDG sulla base delle informazioni oggi disponibili.
+Questo documento definisce i confini architetturali di Kiron CDG e guida le prossime decisioni tecniche.
 
-È la fonte di riferimento per le responsabilità dei componenti e per le decisioni tecniche ancora da verificare. Non definisce infrastruttura, deployment, dimensionamento, API di dettaglio o schema fisico del database.
+Lo stato `Active` indica che l'architettura logica è approvata e applicabile al lavoro corrente. I componenti ancora da verificare restano indicati come candidati e potranno essere confermati o scartati sulla base delle prove tecniche previste.
 
-Per il funzionamento del prodotto si rimanda a [`product-overview.md`](product-overview.md).
+Il funzionamento del prodotto è descritto in [`product-overview.md`](product-overview.md).
 
 ## Decisioni confermate
 
 - OutSystems è il frontend operativo.
-- MariaDB `10.6.22-MariaDB-log` è l'unico database ed è self-managed.
+- MariaDB `10.6.22-MariaDB-log` è l'unico database ed è self-managed dal cliente.
+- La versione MariaDB presente dal cliente non è modificabile dal progetto. Deve essere verificato il corretto funzionamento dei componenti scelti su questa versione.
 - Configurazioni, mapping, parametri e schedulazioni vengono gestiti in OutSystems e salvati in MariaDB.
 - Le elaborazioni possono essere avviate manualmente o tramite Timer OutSystems.
 - La risoluzione minima dei Timer è 5 minuti.
-- MariaDB è anche il punto di pubblicazione di Actual e Forecast.
+- MariaDB è il punto di pubblicazione di Actual e Forecast.
+- BI Oracle accede direttamente ai dati pubblicati su MariaDB. Connessione, credenziali e rete verranno definite durante l'integrazione.
 - Non verrà sviluppato un linguaggio proprietario per descrivere le formule.
 
 SQLMesh e GoRules ZEN sono candidati da validare, non componenti ancora confermati.
@@ -106,9 +108,7 @@ Deve:
 - aggiornare stato ed esito in MariaDB;
 - restituire subito l'accettazione della richiesta.
 
-Non gestisce le schedulazioni e non contiene formule Kiron.
-
-L'implementazione verrà scelta insieme al motore di elaborazione. Python è l'opzione più naturale se SQLMesh verrà confermato, ma non è ancora un vincolo architetturale.
+Non gestisce le schedulazioni e non contiene formule Kiron. L'implementazione verrà scelta insieme al motore di elaborazione.
 
 ### Motore di elaborazione
 
@@ -123,7 +123,7 @@ Il motore dovrà gestire:
 - audit e controlli sui dati;
 - tracciabilità tecnica delle esecuzioni.
 
-SQLMesh è il candidato preferito, ma il supporto ufficiale riguarda MySQL. La compatibilità con MariaDB deve essere dimostrata prima di confermarlo.
+SQLMesh è il candidato preferito. La compatibilità con MariaDB `10.6.22` deve essere dimostrata prima di confermarlo.
 
 ### GoRules ZEN
 
@@ -141,7 +141,7 @@ Se il vantaggio non sarà dimostrato, ZEN non verrà introdotto.
 
 ### BI Oracle e dashboard
 
-Actual e Forecast vengono esposti tramite tabelle o viste stabili su MariaDB. La modalità tecnica di accesso della BI è ancora da definire.
+Actual e Forecast vengono esposti tramite tabelle o viste stabili su MariaDB. BI Oracle accede direttamente a questi dati.
 
 ## Flusso di esecuzione
 
@@ -166,46 +166,26 @@ sequenceDiagram
 
 Gli stati iniziali sono `PENDING`, `RUNNING`, `COMPLETED` e `FAILED`. Altri stati verranno aggiunti solo in presenza di un requisito concreto.
 
-## Vincolo sulla versione MariaDB
+## Decisioni e verifiche ancora aperte
 
-MariaDB `10.6.22` appartiene a una serie che non riceve più manutenzione Community. L'ultima patch della serie è la `10.6.27`.
-
-Poiché l'istanza è self-managed, il progetto deve definire:
-
-- la versione che intende supportare;
-- il percorso di aggiornamento;
-- la compatibilità con OutSystems e con le integrazioni esistenti;
-- backup, monitoraggio e ripristino.
-
-La versione target non viene scelta in questo documento.
-
-Fonti:
-
-- [Ciclo di vita delle versioni MariaDB](https://mariadb.org/about/)
-- [Versioni MariaDB pubblicate](https://mariadb.org/mariadb/all-releases/)
-- [Supporto MySQL di SQLMesh](https://sqlmesh.readthedocs.io/en/latest/integrations/engines/mysql/)
-
-## Decisioni ancora aperte
-
-- baseline MariaDB da supportare;
-- compatibilità effettiva di SQLMesh con MariaDB;
+- compatibilità effettiva di SQLMesh con MariaDB `10.6.22`;
 - modalità di acquisizione da Campus, Campus 2.0 e Infinity;
 - volumi e tempi attesi delle elaborazioni;
-- modalità di accesso di BI Oracle;
+- dettagli tecnici di accesso di BI Oracle;
 - formule, riconciliazioni e ribaltamenti ancora da definire;
 - utilità effettiva di GoRules ZEN.
 
-Questi punti non bloccano la definizione dei confini logici, ma bloccano le scelte tecniche che ne dipendono.
+Questi punti non modificano i confini architetturali approvati. Ogni scelta tecnica che ne dipende verrà presa dopo la relativa verifica.
 
-## Prossimo gate
+## Gate tecnici
 
-La prima verifica tecnica riguarda SQLMesh e MariaDB.
+### SQLMesh e MariaDB
 
-Un prototipo isolato deve rispondere a questa domanda:
+La prima prova deve rispondere a questa domanda:
 
-> SQLMesh può collegarsi a MariaDB, eseguire un modello semplice e uno incrementale, applicare un audit e gestire correttamente gli intervalli senza workaround sproporzionati?
+> SQLMesh può collegarsi a MariaDB `10.6.22`, eseguire un modello semplice e uno incrementale, applicare un audit e gestire correttamente gli intervalli senza workaround sproporzionati?
 
-La prova deve includere solo:
+La prova include solo:
 
 - connessione tramite l'adapter MySQL;
 - un modello semplice;
@@ -214,17 +194,12 @@ La prova deve includere solo:
 - una seconda esecuzione sugli stessi intervalli;
 - raccolta delle incompatibilità riscontrate.
 
-L'esito sarà `SÌ`, `NO` o `PARZIALE`. Nel terzo caso, ogni workaround dovrà essere valutato contro RFC-0001.
+L'esito sarà `SÌ`, `NO` o `PARZIALE`. Nel terzo caso, ogni workaround verrà valutato contro RFC-0001.
 
-## Passaggio ad Active
+### GoRules ZEN
 
-Il documento potrà diventare `Active` quando saranno verificati almeno:
+La validazione verrà aperta dopo l'ingestione dati e prima di sviluppare formule e ribaltamenti. Userà casi reali Kiron e gli stessi criteri di semplicità, beneficio verificabile e costo di integrazione.
 
-- baseline e percorso di aggiornamento di MariaDB;
-- compatibilità del motore di elaborazione;
-- una richiesta manuale end-to-end;
-- una richiesta schedulata end-to-end;
-- protezione dalle richieste duplicate;
-- registrazione e consultazione dello stato;
-- pubblicazione di un primo output su MariaDB;
-- accesso della BI ai risultati.
+## Aggiornamento del documento
+
+Il documento verrà aggiornato quando una verifica modifica una scelta architetturale, conferma un candidato o ne determina l'esclusione. I dettagli di implementazione che non cambiano i confini restano fuori da questa panoramica.
