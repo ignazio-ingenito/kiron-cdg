@@ -1,0 +1,76 @@
+name: SonarQube
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.c'
+      - '**/*.cc'
+      - '**/*.cpp'
+      - '**/*.cs'
+      - '**/*.go'
+      - '**/*.h'
+      - '**/*.hpp'
+      - '**/*.java'
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.kt'
+      - '**/*.kts'
+      - '**/*.mjs'
+      - '**/*.php'
+      - '**/*.py'
+      - '**/*.rb'
+      - '**/*.rs'
+      - '**/*.sh'
+      - '**/*.ts'
+      - '**/*.tsx'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonarqube-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ci-standard
+    timeout-minutes: 20
+    env:
+      SONARQUBE_SELF_HOSTED_URL: ${{ vars.SONARQUBE_SELF_HOSTED_URL }}
+      SONARQUBE_SELF_HOSTED_TOKEN: ${{ secrets.SONARQUBE_SELF_HOSTED_TOKEN }}
+      SSL_CERT_FILE: /etc/sonarqube-trust/ca-certificates.pem
+      SONAR_SCANNER_OPTS: >-
+        -Djavax.net.ssl.trustStore=/etc/sonarqube-trust/bundle.p12
+        -Djavax.net.ssl.trustStoreType=PKCS12
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Validate SonarQube connection
+        run: |
+          set -euo pipefail
+          test -n "${SONARQUBE_SELF_HOSTED_URL:-}"
+          test -n "${SONARQUBE_SELF_HOSTED_TOKEN:-}"
+          test -r "$SSL_CERT_FILE"
+          test -r /etc/sonarqube-trust/bundle.p12
+          curl --fail --silent --show-error --max-time 10 \
+            --cacert "$SSL_CERT_FILE" \
+            "$SONARQUBE_SELF_HOSTED_URL/api/system/status" >/dev/null
+
+      - name: Run SonarQube analysis
+        uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
+        with:
+          args: >-
+            -Dsonar.projectKey=ignazio-ingenito_kiron-cdg
+            -Dsonar.projectName=kiron-cdg
+            -Dsonar.sources=.
+            -Dsonar.exclusions=docs/**,README.md,AGENTS.md
+        env:
+          SONAR_HOST_URL: ${{ env.SONARQUBE_SELF_HOSTED_URL }}
+          SONAR_TOKEN: ${{ env.SONARQUBE_SELF_HOSTED_TOKEN }}
+          SONAR_SCANNER_OPTS: ${{ env.SONAR_SCANNER_OPTS }}
