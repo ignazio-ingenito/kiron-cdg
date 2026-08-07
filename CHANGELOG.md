@@ -5,6 +5,11 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 
+### Features
+
+- **changelog:** Adopt centralized automation
+
+
 ### Documentation
 
 - Add README
@@ -18,6 +23,7 @@ All notable changes to this project are documented in this file.
 - Add future-ready SonarQube analysis
 - **changelog:** Add conventional commit configuration
 - **changelog:** Generate on main merges
+- **changelog:** Verify public reusable access
 
 
 ### Maintenance
