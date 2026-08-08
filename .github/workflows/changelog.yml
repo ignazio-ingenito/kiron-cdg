@@ -10,7 +10,7 @@ permissions:
 jobs:
   changelog:
     if: github.event.pull_request.head.repo.full_name == github.repository
-    uses: ignazio-ingenito/developer-workspace/.github/workflows/changelog-reusable.yml@bbdc8e05ffbaaf8d296c02c883b780391d3655c9
+    uses: ignazio-ingenito/developer-workspace/.github/workflows/changelog-reusable.yml@main
     with:
       app-client-id: ${{ vars.CHANGELOG_APP_CLIENT_ID }}
     secrets:
