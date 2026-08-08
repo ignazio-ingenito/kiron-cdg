@@ -37,3 +37,4 @@ docs: align Agent OS RFC and skill lifecycle
 
 feat(changelog): adopt centralized automation
 - **ci:** Update changelog reusable workflow pin
+- **ci:** Follow changelog workflow main
