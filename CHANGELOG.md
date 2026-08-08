@@ -33,3 +33,8 @@ All notable changes to this project are documented in this file.
 
 docs: align Agent OS RFC and skill lifecycle
 - **renovate:** Abilita configurazione condivisa
+- Merge pull request #3 from ignazio-ingenito/agent/centralize-changelog
+
+feat(changelog): adopt centralized automation
+- **ci:** Update changelog reusable workflow pin
+- **ci:** Follow changelog workflow main
